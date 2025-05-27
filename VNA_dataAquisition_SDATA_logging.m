@@ -241,21 +241,6 @@ if ishandle(figRes)
     % Update plot data
     set(hPlotRes, 'XData', xDataNum, 'YData', avgResLog);
 
-%     margin = 1/1440;  % 1 minute margin in days
-% 
-%     % Set limits: start fixed to first entry, end is latest + margin
-%     if length(xDataNum) > 1
-%         leftLimit = datenum(xAxisStartTime) - margin;
-%         rightLimit = xDataNum(end) + margin;
-%         xlim(axRes, [leftLimit, rightLimit]);
-%     else
-%         % Only one data point: center limits around it
-%         xlim(axRes, [xDataNum(1) - margin, xDataNum(1) + margin]);
-%     end
-
-    % Format x-axis ticks as datetime strings
-%     datetick(axRes, 'x', 'yyyy-mm-dd HH:MM:SS', 'keeplimits', 'keepticks');
-
     % Rotate labels for readability
     axRes.XTickLabelRotation = 45;
 
@@ -279,11 +264,9 @@ instrreset;
 clear all;
 display(['Connection succsefully closed! :)'])
 %% ---------------- Example reading the data ------------------------------ 
-%% ---------------- Example reading the data ------------------------------ 
 % ------------  INPUT  ---------------------------------------------------
 filename       = 'impedance_data_Example.txt';
 pointsPerSweep = 201;                     % must match VNA sweep‐point setting
-Z0             = 50;                      % (unused here, but kept for context)
 
 % ------------  LOAD TABLE  ---------------------------------------------
 T = readtable(filename, 'Delimiter', '\t', 'HeaderLines', 1);
