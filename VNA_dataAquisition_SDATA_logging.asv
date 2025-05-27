@@ -54,7 +54,10 @@ end
 fprintf(VNA, '*RST\n');  % Reset the device
 fprintf(VNA, '*CLS\n');  % Clear any errors from previous sessions
 return
-
+%% Setting up the file to save data to
+todayStr = datestr(now, 'yyyy-mm-dd');  % Format: 2025-05-27
+outputFile = ['impedance_data_' todayStr '.txt'];
+fid = fopen(outputFile, 'a');  % Append mode
 %% Setting and checking params
 % Set frequency range from 1 GHz to 5 GHz and the number of points to 201
 fprintf(VNA, ':SENS:FREQ:START 5E0');    % Start frequency = 1 GHz
@@ -71,86 +74,99 @@ numPoints = fscanf(VNA, '%d');
 disp(['Start Frequency: ', num2str(startFreq), ' Hz']);
 disp(['Stop Frequency: ', num2str(stopFreq), ' Hz']);
 disp(['Number of Points: ', num2str(numPoints)]);
-%% Setting S11 paramter and initiating sweep
-fprintf(VNA, 'CALC1:PAR:DEF S11\n'); % Sets paramater s S11
-fprintf(VNA, 'INIT:IMM; *WAI\n');  % Initiate a sweep  
+%% --- Initialize VNA and File Setup ---
+fprintf(VNA, 'CALC1:PAR:DEF S11\n');   % Set S11 parameter
+todayStr = datestr(now, 'yyyy-mm-dd');
+outputFile = ['impedance_data_' todayStr '.txt'];
 
- %% Reding in the S11 data
-fprintf(VNA, ':CALC1:DATA:SDATA?'); % This collects the S11 data
-fprintf(VNA, ':SENS:FREQ:DATA?\n');  % Query frequency data
-pause(3);
-rawData = fscanf(VNA);
-%% Processing and plotting the data
-close all
-% Process the data: Convert to numeric values
-data = str2double(strsplit(strtrim(rawData), ','));
-frequencies = str2double(strsplit(strtrim(fscanf(VNA)), ','));
+% Write header once
+fid = fopen(outputFile, 'a');
+fprintf(fid, 'Timestamp\t\tFrequency(Hz)\tReal(Z)\tImag(Z)\t|Z|\n');
+fclose(fid);
 
-% Separate real and imaginary parts
-realPart = data(1:2:end);  % Real part (odd indices)
-imagPart = data(2:2:end);  % Imaginary part (even indices)
-
-S11_FreqDomain = complex(realPart, imagPart); % Combine into a complex number
-magS11_dB = 20*log10(abs(S11_FreqDomain));  % Magnitude in dB
-
-% Define characteristic impedance Z0 (typically 50 Ohms)
-Z0 = 50;
-
-% Calculate the impedance using the formula Z = Z0 * (1 + S11) / (1 - S11)
-impedance = Z0 * (1 + S11_FreqDomain) ./ (1 - S11_FreqDomain);
-
-% Extract the real and imaginary parts of the impedance
-impedance_real = real(impedance);
-impedance_imag = imag(impedance);
-
-% Plot S11 Magnitude, Phase, and Impedance in Frequency Domain
+% Create figure once
 f1 = figure(1);
 
-% Plot the Magnitude of S11 (in dB)
-subplot(3,1,1)
-plot(frequencies * 1e-6, magS11_dB, 'LineWidth', 2);  % Plot in dB
-% xlabel('Frequency (MHz)');
-ylabel('|S11| (dB)');
-title('Magnitude of S11');
-grid on;
-set(gca,"FontSize",12,"fontname","Palatino Linotype");
+%% --- Start Continuous Logging Loop ---
+while ishandle(f1)  % Runs until the figure is closed
+    %% Initiate sweep and read S11
+    fprintf(VNA, 'INIT:IMM; *WAI\n');
+    fprintf(VNA, ':CALC1:DATA:SDATA?');
+    pause(3);
+    rawData = fscanf(VNA);
+    data = str2double(strsplit(strtrim(rawData), ','));
+    realPart = data(1:2:end);
+    imagPart = data(2:2:end);
+    S11_FreqDomain = complex(realPart, imagPart);
 
+    %% Frequency read
+    fprintf(VNA, ':SENS:FREQ:DATA?\n');
+    frequencies = str2double(strsplit(strtrim(fscanf(VNA)), ','));
 
-% Plot the Phase of S11 (in radians)
-subplot(3,1,2);
-plot(frequencies * 1e-6, angle(S11_FreqDomain), 'LineWidth', 2);  % Phase in radians
-% xlabel('Frequency (MHz)');
-ylabel('Phase (radians)');
-title('Phase of S11');
-grid on;
-set(gca,"FontSize",12,"fontname","Palatino Linotype");
+    %% Calculate impedance
+    Z0 = 50;
+    impedance = Z0 * (1 + S11_FreqDomain) ./ (1 - S11_FreqDomain);
+    impedance_real = real(impedance);
+    impedance_imag = imag(impedance);
+    impedance_mag = abs(impedance);
 
-% Plot the Impedance (Real and Imaginary Parts)
-subplot(3,1,3);
-plot(frequencies * 1e-6, impedance_real, 'r', 'DisplayName', 'Real','linewidth',2);  % Real part
-hold on;
-plot(frequencies * 1e-6, impedance_imag, 'b', 'DisplayName', 'Imaginary','linewidth',2);  % Imaginary part
-xlabel('Frequency (MHz)');
-ylabel('Impedance (\Omega)');
-title('Impedance (Real and Imaginary Parts)');
-legend;
-grid on;
-set(gca,"FontSize",12,"fontname","Palatino Linotype");
-set(gcf,'position',[189.0000  101.6667  681.3333  521.3333]);
-exportgraphics(f1,'Impedance_Lowpass.png','Resolution',150)
+    %% Save data to file
+    timestamp = datestr(now, 'yyyy-mm-dd HH:MM:SS');
+    fid = fopen(outputFile, 'a');
+    for i = 1:length(frequencies)
+        fprintf(fid, '%s\t%.6e\t%.6f\t%.6f\t%.6f\n', ...
+            timestamp, frequencies(i), impedance_real(i), impedance_imag(i), impedance_mag(i));
+    end
+    fprintf(fid, '\n');
+    fclose(fid);
 
+    %% Update plots
+    clf(f1);  % Clear figure
+    set(f1, 'Position', [189, 101.6667, 681.3333, 521.3333]);
 
-%% averaging 
-% % Enable averaging and set the average count
-% fprintf(visaObj, 'SENS:AVER:STAT ON');
-% fprintf(visaObj, 'SENS:AVER:COUN 10');
-    %% Clean up connections at the end
-    % % Clean up
-   
+    subplot(3,1,1)
+    magS11_dB = 20*log10(abs(S11_FreqDomain));
+    plot(frequencies * 1e-6, magS11_dB, 'LineWidth', 2);
+    ylabel('|S11| (dB)');
+    title('Magnitude of S11');
+    grid on;
+    set(gca, "FontSize", 12, "FontName", "Palatino Linotype");
+
+    subplot(3,1,2)
+    plot(frequencies * 1e-6, angle(S11_FreqDomain), 'LineWidth', 2);
+    ylabel('Phase (radians)');
+    title('Phase of S11');
+    grid on;
+    set(gca, "FontSize", 12, "FontName", "Palatino Linotype");
+
+    subplot(3,1,3)
+    plot(frequencies * 1e-6, impedance_real, 'r', 'DisplayName', 'Real', 'LineWidth', 2);
+    hold on;
+    plot(frequencies * 1e-6, impedance_imag, 'b', 'DisplayName', 'Imag', 'LineWidth', 2);
+    xlabel('Frequency (MHz)');
+    ylabel('Impedance (\Omega)');
+    title('Impedance (Real and Imaginary)');
+    legend;
+    grid on;
+    set(gca, "FontSize", 12, "FontName", "Palatino Linotype");
+
+    drawnow;
+
+    %% Wait 30 seconds before next sweep
+    pause(30);
+end
+return
+%% --- Clean Up After Window Closed ---
 fclose(VNA);
 delete(VNA);
 clear VNA;
-instrreset 
- clear all
-% Reset all instrument objects Use this to check if instrfind returns only 1 connection
+instrreset;
+clear all;
+
+%% --- Clean Up Instruments ---
+fclose(VNA);
+delete(VNA);
+clear VNA;
+instrreset;
+clear all;
 

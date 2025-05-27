@@ -54,6 +54,11 @@ end
 fprintf(VNA, '*RST\n');  % Reset the device
 fprintf(VNA, '*CLS\n');  % Clear any errors from previous sessions
 return
+%% 
+% Define output file
+todayStr = datestr(now, 'yyyy-mm-dd');  % Format: 2025-05-27
+outputFile = ['impedance_data_' todayStr '.txt'];
+fid = fopen(outputFile, 'a');  % Append mode
 
 %% Setting and checking params
 % Set frequency range from 1 GHz to 5 GHz and the number of points to 201
@@ -71,58 +76,34 @@ numPoints = fscanf(VNA, '%d');
 disp(['Start Frequency: ', num2str(startFreq), ' Hz']);
 disp(['Stop Frequency: ', num2str(stopFreq), ' Hz']);
 disp(['Number of Points: ', num2str(numPoints)]);
-%% Setting S11 paramter and initiating sweep
+%% Set up logging
+% Create figure before entering loop
+f1 = figure('Name', 'S11 and Impedance Monitoring');
+
+% Setting S11 paramter and initiating sweep
 fprintf(VNA, 'CALC1:PAR:DEF S11\n'); % Sets paramater s S11
 fprintf(VNA, 'INIT:IMM; *WAI\n');  % Initiate a sweep  
 
  %% Reding in the S11 data
 fprintf(VNA, ':CALC1:DATA:SDATA?'); % This collects the S11 data
+fprintf(VNA, ':SENS:FREQ:DATA?\n');  % Query frequency data
 pause(3);
 rawData = fscanf(VNA);
 %% Processing and plotting the data
 close all
 % Process the data: Convert to numeric values
 data = str2double(strsplit(strtrim(rawData), ','));
+frequencies = str2double(strsplit(strtrim(fscanf(VNA)), ','));
 
 % Separate real and imaginary parts
 realPart = data(1:2:end);  % Real part (odd indices)
 imagPart = data(2:2:end);  % Imaginary part (even indices)
 
-% Combine into a complex number
-S11_FreqDomain = complex(realPart, imagPart);
-
-% Get frequency axis (assuming frequency data is available)
-fprintf(VNA, ':SENS:FREQ:DATA?\n');  % Query frequency data
-frequencies = str2double(strsplit(strtrim(fscanf(VNA)), ','));
-
-% Plot S11 Magnitude and Phase in Frequency Domain
-figure;
-
-% Plot the Magnitude of S11 (in dB)
-
+S11_FreqDomain = complex(realPart, imagPart); % Combine into a complex number
 magS11_dB = 20*log10(abs(S11_FreqDomain));  % Magnitude in dB
-subplot(2,1,1)
-plot(frequencies * 1e-6, (magS11_dB),'LineWidth',2);  % Plot in dB
-xlabel('Frequency (MHz)');
-ylabel('|S11| (dB)');
-title('Magnitude of S11');
-grid on;
-ylim([-50, 50]);  % Set the range from -50 dB to +50 dB
 
-
-% % Plot the Phase of S11 (in radians)
-subplot(2,1,2);
-plot(frequencies * 1e-6, angle(S11_FreqDomain),'LineWidth',2);  % Phase in radians
-xlabel('Frequency (MHz)');
-ylabel('Phase (radians)');
-title('Phase of S11');
-grid on;
-%% Calculating Impedance
 % Define characteristic impedance Z0 (typically 50 Ohms)
 Z0 = 50;
-
-% Calculate S11 as a complex number (already done above)
-% S11_FreqDomain = complex(realPart, imagPart);  % This is the complex S11
 
 % Calculate the impedance using the formula Z = Z0 * (1 + S11) / (1 - S11)
 impedance = Z0 * (1 + S11_FreqDomain) ./ (1 - S11_FreqDomain);
@@ -135,7 +116,6 @@ impedance_imag = imag(impedance);
 f1 = figure(1);
 
 % Plot the Magnitude of S11 (in dB)
-magS11_dB = 20*log10(abs(S11_FreqDomain));  % Magnitude in dB
 subplot(3,1,1)
 plot(frequencies * 1e-6, magS11_dB, 'LineWidth', 2);  % Plot in dB
 % xlabel('Frequency (MHz)');
@@ -165,10 +145,10 @@ title('Impedance (Real and Imaginary Parts)');
 legend;
 grid on;
 set(gca,"FontSize",12,"fontname","Palatino Linotype");
-set(gcf,'position',[498    54   691   388]);
+set(gcf,'position',[189.0000  101.6667  681.3333  521.3333]);
 exportgraphics(f1,'Impedance_Lowpass.png','Resolution',150)
-% Optional: Logarithmic scale for frequency axis
-% set(gca, 'XScale', 'log');  % Log scale for X-axis (Frequency)
+
+
 
 %% averaging 
 % % Enable averaging and set the average count
